@@ -79,6 +79,22 @@
   th { font-weight: 600; color: var(--muted); font-size: 15px; }
   tfoot td { font-weight: 700; border-bottom: 0; border-top: 2px solid var(--ink); }
   td.zero { color: #a3ada6; }
+  .combo { position: relative; }
+  .combo input { padding-right: 60px; }
+  .combo-toggle {
+    position: absolute; right: 4px; top: 4px; min-height: 44px; width: 48px; padding: 0;
+    background: transparent; color: var(--ink); border: 0; font-size: 18px;
+  }
+  #matList {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5;
+    margin: 0; padding: 4px; list-style: none; background: #fff;
+    border: 2px solid var(--line); border-radius: 6px; max-height: 280px; overflow-y: auto;
+    box-shadow: 0 6px 18px rgba(0,0,0,.15);
+  }
+  #matList li { padding: 12px; min-height: 46px; border-radius: 4px; cursor: pointer; font-weight: 500; }
+  #matList li:hover { background: #eef2ee; }
+  #matList li[aria-selected=true] { background: var(--ok-bg); font-weight: 700; }
+  #matList li.none { color: var(--muted); cursor: default; }
   #toast {
     position: fixed; left: 12px; right: 12px; bottom: 12px; max-width: 696px; margin: 0 auto;
     padding: 14px 16px; border-radius: 6px; font-weight: 600; display: none; z-index: 10;
@@ -121,7 +137,7 @@
 
 <script>
 /* ====== SET THIS to your Apps Script Web app URL (ends in /exec) ====== */
-const API_URL = 'https://script.google.com/macros/s/AKfycbx8g5THnLHxOEwJqDrQ_QpZ68Awp6h2i9vz3nobSf0YAa-TxRN3if6XroHnJg8TQNrZ/exec';
+const API_URL = 'PASTE_WEB_APP_URL_HERE';
 /* ====================================================================== */
 
 const $ = id => document.getElementById(id);
@@ -245,7 +261,6 @@ function renderPanel() {
 
 function renderAssign(panel, tag) {
   const reused = tag.state === 'removed';
-  const opts = current.materials.map(m => '<option value="' + esc(m) + '"></option>').join('');
   const locs = current.locations.map(l =>
     '<button type="button" data-loc="' + esc(l) + '" aria-pressed="' + (pickedLocation === l) + '">' + esc(l) + '</button>'
   ).join('');
@@ -256,8 +271,11 @@ function renderAssign(panel, tag) {
       (reused ? '<span class="badge off">Used · ' + esc(tag.status) + '</span>' : '<span class="badge new">Unassigned</span>') +
       '</div>' +
       '<div><label for="matInput">Material on this unit</label>' +
-      '<input type="text" id="matInput" list="matList" placeholder="Start typing, e.g. 2x4 1650 16\'" autocomplete="off" spellcheck="false">' +
-      '<datalist id="matList">' + opts + '</datalist></div>' +
+      '<div class="combo">' +
+        '<input type="text" id="matInput" role="combobox" aria-expanded="false" aria-controls="matList" placeholder="Tap to choose or type to filter" autocomplete="off" spellcheck="false">' +
+        '<button type="button" class="combo-toggle" id="matToggle" aria-label="Show all materials">&#9662;</button>' +
+        '<ul id="matList" role="listbox" hidden></ul>' +
+      '</div></div>' +
       '<div><label>Where is it?</label><div class="seg" id="locSeg">' + locs + '</div></div>' +
       '<button type="button" id="assignBtn">Assign tag to unit</button>' +
       '<button type="button" class="secondary" id="cancelBtn">Cancel</button>' +
@@ -269,8 +287,55 @@ function renderAssign(panel, tag) {
     pickedLocation = b.dataset.loc;
     [...$('locSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b));
   });
+  setupCombo(current.materials);
   $('cancelBtn').onclick = closePanel;
   $('assignBtn').onclick = doAssign;
+}
+
+function setupCombo(materials) {
+  const input = $('matInput'), list = $('matList'), toggle = $('matToggle');
+  const low = v => v.trim().toLowerCase();
+  const exact = () => materials.find(m => low(m) === low(input.value));
+
+  function show(forceAll) {
+    const q = low(input.value);
+    // Once a full material is chosen (or nothing typed), show the whole list so neighbors are one tap away
+    const items = (forceAll || !q || exact()) ? materials : materials.filter(m => low(m).includes(q));
+    const chosen = exact();
+    list.innerHTML = items.length
+      ? items.map(m => '<li role="option" data-v="' + esc(m) + '"' + (m === chosen ? ' aria-selected="true"' : '') + '>' + esc(m) + '</li>').join('')
+      : '<li class="none">No match on the Materials list</li>';
+    list.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    const sel = list.querySelector('[aria-selected="true"]');
+    if (sel) sel.scrollIntoView({ block: 'nearest' });
+  }
+  function hide() { list.hidden = true; input.setAttribute('aria-expanded', 'false'); }
+
+  input.addEventListener('focus', () => { input.select(); show(false); });
+  input.addEventListener('click', () => show(false));
+  input.addEventListener('input', () => show(false));
+  input.addEventListener('blur', hide);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hide();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const first = list.querySelector('li[data-v]');
+      if (!list.hidden && first && !exact()) { input.value = first.dataset.v; }
+      hide();
+    }
+  });
+
+  // mousedown + preventDefault keeps focus in the input so blur doesn't close the list before the tap registers
+  list.addEventListener('mousedown', e => {
+    e.preventDefault();
+    const li = e.target.closest('li[data-v]');
+    if (li) { input.value = li.dataset.v; hide(); }
+  });
+  toggle.addEventListener('mousedown', e => {
+    e.preventDefault();
+    if (list.hidden) { input.focus(); show(true); } else { hide(); }
+  });
 }
 
 function renderActive(panel, tag) {
