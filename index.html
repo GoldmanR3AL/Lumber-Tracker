@@ -65,6 +65,9 @@
   .seg button[aria-pressed=true] { background: var(--pine); color: #fff; border-color: var(--pine); }
   .seg button.danger { border-color: var(--alert); color: var(--alert); }
   .seg button.danger:hover { background: var(--err-bg); }
+  .seg button.danger[aria-pressed=true] { background: var(--alert); border-color: var(--alert); color: #fff; }
+  .confirmbox { padding: 12px 14px; border-radius: 6px; background: var(--ok-bg); border: 1px solid #a9d3bc; }
+  .confirmbox.out { background: var(--err-bg); border-color: #e3b5a2; }
   label { font-weight: 600; display: block; margin-bottom: 6px; }
   .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 8px 0 0; }
   .facts dt { color: var(--muted); }
@@ -147,6 +150,8 @@ const short = loc => loc.replace(' Yard', '');
 let scanner = null;
 let current = null;      // { tag, materials, locations, removed }
 let pickedLocation = '';
+let pickedTo = '';
+const OUT_OPTIONS = ['Open']; // choices that take a unit out of inventory
 let toastTimer;
 
 function toast(msg, kind = 'ok') {
@@ -340,24 +345,37 @@ function setupCombo(materials) {
 
 function renderActive(panel, tag) {
   const others = current.locations.filter(l => l !== tag.location);
-  const moves = others.map(l => '<button type="button" data-to="' + esc(l) + '">Move to ' + esc(short(l)) + '</button>').join('');
-  const outs = current.removed.map(r => '<button type="button" class="danger" data-to="' + esc(r) + '">Mark ' + esc(r) + '</button>').join('');
+  const moves = others.map(l => '<button type="button" data-to="' + esc(l) + '" aria-pressed="false">' + esc(short(l)) + '</button>').join('');
+  const outs = OUT_OPTIONS.map(r => '<button type="button" class="danger" data-to="' + esc(r) + '" aria-pressed="false">' + esc(r) + '</button>').join('');
+  pickedTo = '';
 
   panel.innerHTML =
     '<div class="stack">' +
       '<div><span class="tagid">' + esc(tag.id) + '</span> <span class="badge">In stock</span>' +
       '<dl class="facts"><dt>Material</dt><dd>' + esc(tag.material) + '</dd><dt>Location</dt><dd>' + esc(tag.location) + '</dd></dl></div>' +
-      '<div><label>Move this unit</label><div class="seg" id="moveSeg">' + moves + '</div></div>' +
-      '<div><label>Taken out of inventory</label><div class="seg" id="outSeg">' + outs + '</div></div>' +
-      '<button type="button" class="secondary" id="cancelBtn">Close</button>' +
+      '<div><label>Move this unit to</label><div class="seg" id="moveSeg">' + moves + '</div></div>' +
+      '<div><label>Take out of inventory</label><div class="seg" id="outSeg">' + outs + '</div></div>' +
+      '<div class="confirmbox" id="confirmBox" hidden></div>' +
+      '<button type="button" id="confirmBtn" disabled>Confirm change</button>' +
+      '<button type="button" class="secondary" id="cancelBtn">Cancel</button>' +
     '</div>';
 
   const handler = e => {
     const b = e.target.closest('button[data-to]');
-    if (b) doMove(b.dataset.to);
+    if (!b) return;
+    pickedTo = b.dataset.to;
+    panel.querySelectorAll('button[data-to]').forEach(x => x.setAttribute('aria-pressed', x === b));
+    const gone = OUT_OPTIONS.includes(pickedTo);
+    $('confirmBox').hidden = false;
+    $('confirmBox').className = 'confirmbox' + (gone ? ' out' : '');
+    $('confirmBox').innerHTML = gone
+      ? 'Take <strong>' + esc(tag.material) + '</strong> out of inventory (' + esc(pickedTo) + ')?'
+      : 'Move <strong>' + esc(tag.material) + '</strong> from ' + esc(tag.location) + ' to <strong>' + esc(pickedTo) + '</strong>?';
+    $('confirmBtn').disabled = false;
   };
   $('moveSeg').addEventListener('click', handler);
   $('outSeg').addEventListener('click', handler);
+  $('confirmBtn').onclick = () => { if (pickedTo) doMove(pickedTo); };
   $('cancelBtn').onclick = closePanel;
 }
 
@@ -392,7 +410,7 @@ async function doMove(to) {
   try {
     const d = await post({ action: 'move', id: tag.id, to });
     if (d.error) throw new Error(d.error);
-    const gone = current.removed.includes(to);
+    const gone = OUT_OPTIONS.includes(to);
     toast(gone ? tag.id + ' removed from inventory (' + to + ')' : tag.id + ' moved to ' + to);
     closePanel();
     loadInventory();
