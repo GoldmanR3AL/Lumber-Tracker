@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumber Tags</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #eceee9;
+    --card: #ffffff;
+    --ink: #17241e;
+    --muted: #5d6b63;
+    --line: #cfd5cd;
+    --pine: #1c5a43;
+    --pine-dark: #123f2f;
+    --alert: #b3401a;
+    --ok-bg: #dcefe4;
+    --err-bg: #f8dfd5;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 17px; line-height: 1.4;
+  }
+  header {
+    background: var(--pine-dark); color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px;
+  }
+  h1, h2 { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; margin: 0; letter-spacing: .01em; }
+  h1 { font-size: 28px; }
+  h2 { font-size: 24px; }
+  main { max-width: 720px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 16px; }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer; border-radius: 6px;
+    border: 2px solid var(--pine); background: var(--pine); color: #fff;
+    padding: 14px 16px; min-height: 52px;
+  }
+  button.secondary { background: #fff; color: var(--pine); }
+  button.danger { background: #fff; color: var(--alert); border-color: var(--alert); }
+  button.small { min-height: 40px; padding: 8px 12px; font-size: 15px; }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #e0a800; outline-offset: 2px; }
+  header button { background: transparent; border-color: #ffffff80; }
+  input[type=text] {
+    font: inherit; width: 100%; min-height: 52px; padding: 10px 12px;
+    border: 2px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink);
+  }
+  .row { display: flex; gap: 10px; }
+  .row > input { flex: 1; }
+  .stack { display: grid; gap: 12px; }
+  #scanBtn { width: 100%; font-size: 19px; }
+  #reader { margin-top: 12px; border-radius: 6px; overflow: hidden; }
+  .tagid { font-family: "Barlow Condensed", sans-serif; font-size: 34px; font-weight: 700; }
+  .muted { color: var(--muted); }
+  .seg { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .seg button { background: #fff; color: var(--ink); border-color: var(--line); }
+  .seg button[aria-pressed=true] { background: var(--pine); color: #fff; border-color: var(--pine); }
+  .seg button.danger { border-color: var(--alert); color: var(--alert); }
+  .seg button.danger:hover { background: var(--err-bg); }
+  label { font-weight: 600; display: block; margin-bottom: 6px; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 8px 0 0; }
+  .facts dt { color: var(--muted); }
+  .facts dd { margin: 0; font-weight: 600; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 15px; font-weight: 600; background: var(--ok-bg); color: var(--pine-dark); }
+  .badge.off { background: var(--err-bg); color: var(--alert); }
+  .badge.new { background: #e6e8e4; color: var(--muted); }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 440px; }
+  th, td { padding: 9px 8px; border-bottom: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-weight: 600; color: var(--muted); font-size: 15px; }
+  tfoot td { font-weight: 700; border-bottom: 0; border-top: 2px solid var(--ink); }
+  td.zero { color: #a3ada6; }
+  #toast {
+    position: fixed; left: 12px; right: 12px; bottom: 12px; max-width: 696px; margin: 0 auto;
+    padding: 14px 16px; border-radius: 6px; font-weight: 600; display: none; z-index: 10;
+    border: 1px solid var(--line);
+  }
+  #toast.ok { background: var(--ok-bg); display: block; }
+  #toast.err { background: var(--err-bg); display: block; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: no-preference) { button { transition: background .12s; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Lumber Tags</h1>
+  <button class="small" id="refreshBtn" type="button">Refresh</button>
+</header>
+
+<main>
+  <section class="card stack" aria-label="Find a tag">
+    <button id="scanBtn" type="button">Scan QR tag</button>
+    <div id="reader" hidden></div>
+    <form id="manualForm" class="row" autocomplete="off">
+      <input type="text" id="tagInput" placeholder="Or type tag ID, e.g. BRE1126-01" autocapitalize="characters" spellcheck="false" aria-label="Tag ID">
+      <button type="submit" class="secondary">Look up</button>
+    </form>
+  </section>
+
+  <section id="panel" class="card" hidden aria-live="polite"></section>
+
+  <section class="card" aria-label="Current inventory">
+    <div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:8px">
+      <h2>Inventory</h2>
+      <span class="muted" id="invMeta"></span>
+    </div>
+    <div class="tablewrap" id="inventory"><p class="muted">Loading…</p></div>
+  </section>
+</main>
+
+<div id="toast" role="status"></div>
+
+<script>
+/* ====== SET THIS to your Apps Script Web app URL (ends in /exec) ====== */
+const API_URL = 'https://script.google.com/macros/s/AKfycbx8g5THnLHxOEwJqDrQ_QpZ68Awp6h2i9vz3nobSf0YAa-TxRN3if6XroHnJg8TQNrZ/exec';
+/* ====================================================================== */
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const short = loc => loc.replace(' Yard', '');
+
+let scanner = null;
+let current = null;      // { tag, materials, locations, removed }
+let pickedLocation = '';
+let toastTimer;
+
+function toast(msg, kind = 'ok') {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = kind;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, kind === 'ok' ? 3500 : 6000);
+}
+
+async function get(params) {
+  const r = await fetch(API_URL + '?' + new URLSearchParams(params));
+  return r.json();
+}
+async function post(body) {
+  // text/plain keeps this a "simple" request so the browser skips the CORS preflight
+  const r = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+
+/* ---------- inventory ---------- */
+
+async function loadInventory() {
+  try {
+    const d = await get({ action: 'inventory' });
+    if (d.error) throw new Error(d.error);
+    renderInventory(d);
+  } catch (e) {
+    $('inventory').innerHTML = '<p class="muted">Could not load inventory. ' + esc(e.message) + '</p>';
+  }
+}
+
+function renderInventory(d) {
+  $('invMeta').textContent = d.grandTotal + ' units · ' + d.unassigned + ' tags unassigned';
+  if (!d.rows.length) {
+    $('inventory').innerHTML = '<p class="muted">Nothing in inventory yet. Scan a tag to assign the first unit.</p>';
+    return;
+  }
+  const head = d.locations.map(l => '<th>' + esc(short(l)) + '</th>').join('');
+  const body = d.rows.map(r =>
+    '<tr><td>' + esc(r.material) + '</td>' +
+    d.locations.map(l => '<td class="' + (r.counts[l] ? '' : 'zero') + '">' + r.counts[l] + '</td>').join('') +
+    '<td><strong>' + r.total + '</strong></td></tr>'
+  ).join('');
+  const foot = '<tr><td>Total</td>' + d.locations.map(l => '<td>' + d.totals[l] + '</td>').join('') +
+    '<td>' + d.grandTotal + '</td></tr>';
+  $('inventory').innerHTML =
+    '<table><thead><tr><th>Material</th>' + head + '<th>Total</th></tr></thead><tbody>' + body +
+    '</tbody><tfoot>' + foot + '</tfoot></table>';
+}
+
+/* ---------- scanning ---------- */
+
+async function stopScan() {
+  if (scanner) {
+    try { await scanner.stop(); scanner.clear(); } catch (_) {}
+    scanner = null;
+  }
+  $('reader').hidden = true;
+  $('scanBtn').textContent = 'Scan QR tag';
+}
+
+async function startScan() {
+  if (scanner) { return stopScan(); }
+  $('reader').hidden = false;
+  $('scanBtn').textContent = 'Stop camera';
+  scanner = new Html5Qrcode('reader');
+  try {
+    await scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 240, height: 240 } },
+      text => { stopScan(); lookup(text); },
+      () => {}
+    );
+  } catch (e) {
+    await stopScan();
+    toast('Camera not available. Type the tag ID instead.', 'err');
+  }
+}
+
+/* ---------- tag lookup ---------- */
+
+async function lookup(raw) {
+  const id = String(raw || '').trim().toUpperCase();
+  if (!id) return;
+  $('tagInput').value = id;
+  try {
+    const d = await get({ action: 'tag', id });
+    if (d.error) throw new Error(d.error);
+    current = d;
+    pickedLocation = '';
+    renderPanel();
+    $('panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    $('panel').hidden = true;
+    toast(e.message, 'err');
+  }
+}
+
+function renderPanel() {
+  const { tag } = current;
+  const panel = $('panel');
+  panel.hidden = false;
+
+  if (tag.state === 'active') return renderActive(panel, tag);
+  renderAssign(panel, tag);
+}
+
+function renderAssign(panel, tag) {
+  const reused = tag.state === 'removed';
+  const opts = current.materials.map(m => '<option value="' + esc(m) + '"></option>').join('');
+  const locs = current.locations.map(l =>
+    '<button type="button" data-loc="' + esc(l) + '" aria-pressed="' + (pickedLocation === l) + '">' + esc(l) + '</button>'
+  ).join('');
+
+  panel.innerHTML =
+    '<div class="stack">' +
+      '<div><span class="tagid">' + esc(tag.id) + '</span> ' +
+      (reused ? '<span class="badge off">Used · ' + esc(tag.status) + '</span>' : '<span class="badge new">Unassigned</span>') +
+      '</div>' +
+      '<div><label for="matInput">Material on this unit</label>' +
+      '<input type="text" id="matInput" list="matList" placeholder="Start typing, e.g. 2x4 1650 16\'" autocomplete="off" spellcheck="false">' +
+      '<datalist id="matList">' + opts + '</datalist></div>' +
+      '<div><label>Where is it?</label><div class="seg" id="locSeg">' + locs + '</div></div>' +
+      '<button type="button" id="assignBtn">Assign tag to unit</button>' +
+      '<button type="button" class="secondary" id="cancelBtn">Cancel</button>' +
+    '</div>';
+
+  $('locSeg').addEventListener('click', e => {
+    const b = e.target.closest('button[data-loc]');
+    if (!b) return;
+    pickedLocation = b.dataset.loc;
+    [...$('locSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b));
+  });
+  $('cancelBtn').onclick = closePanel;
+  $('assignBtn').onclick = doAssign;
+}
+
+function renderActive(panel, tag) {
+  const others = current.locations.filter(l => l !== tag.location);
+  const moves = others.map(l => '<button type="button" data-to="' + esc(l) + '">Move to ' + esc(short(l)) + '</button>').join('');
+  const outs = current.removed.map(r => '<button type="button" class="danger" data-to="' + esc(r) + '">Mark ' + esc(r) + '</button>').join('');
+
+  panel.innerHTML =
+    '<div class="stack">' +
+      '<div><span class="tagid">' + esc(tag.id) + '</span> <span class="badge">In stock</span>' +
+      '<dl class="facts"><dt>Material</dt><dd>' + esc(tag.material) + '</dd><dt>Location</dt><dd>' + esc(tag.location) + '</dd></dl></div>' +
+      '<div><label>Move this unit</label><div class="seg" id="moveSeg">' + moves + '</div></div>' +
+      '<div><label>Taken out of inventory</label><div class="seg" id="outSeg">' + outs + '</div></div>' +
+      '<button type="button" class="secondary" id="cancelBtn">Close</button>' +
+    '</div>';
+
+  const handler = e => {
+    const b = e.target.closest('button[data-to]');
+    if (b) doMove(b.dataset.to);
+  };
+  $('moveSeg').addEventListener('click', handler);
+  $('outSeg').addEventListener('click', handler);
+  $('cancelBtn').onclick = closePanel;
+}
+
+function closePanel() {
+  $('panel').hidden = true;
+  current = null;
+  $('tagInput').value = '';
+}
+
+/* ---------- actions ---------- */
+
+async function doAssign() {
+  const material = $('matInput').value.trim();
+  if (!material) return toast('Choose a material', 'err');
+  if (!pickedLocation) return toast('Choose a location', 'err');
+  $('assignBtn').disabled = true;
+  try {
+    const d = await post({ action: 'assign', id: current.tag.id, material, location: pickedLocation });
+    if (d.error) throw new Error(d.error);
+    toast(current.tag.id + ' assigned: ' + d.tag.material + ' at ' + d.tag.location);
+    closePanel();
+    loadInventory();
+  } catch (e) {
+    toast(e.message, 'err');
+    const b = $('assignBtn'); if (b) b.disabled = false;
+  }
+}
+
+async function doMove(to) {
+  const tag = current.tag;
+  document.querySelectorAll('#panel button').forEach(b => b.disabled = true);
+  try {
+    const d = await post({ action: 'move', id: tag.id, to });
+    if (d.error) throw new Error(d.error);
+    const gone = current.removed.includes(to);
+    toast(gone ? tag.id + ' removed from inventory (' + to + ')' : tag.id + ' moved to ' + to);
+    closePanel();
+    loadInventory();
+  } catch (e) {
+    toast(e.message, 'err');
+    document.querySelectorAll('#panel button').forEach(b => b.disabled = false);
+  }
+}
+
+/* ---------- wire up ---------- */
+
+$('scanBtn').addEventListener('click', startScan);
+$('manualForm').addEventListener('submit', e => { e.preventDefault(); stopScan(); lookup($('tagInput').value); });
+$('refreshBtn').addEventListener('click', loadInventory);
+
+if (API_URL.startsWith('PASTE')) {
+  $('inventory').innerHTML = '<p class="muted">Set API_URL at the top of index.html to your Apps Script Web app URL.</p>';
+} else {
+  loadInventory();
+}
+</script>
+</body>
+</html>
