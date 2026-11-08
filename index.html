@@ -197,7 +197,8 @@ function renderInventory(d) {
     $('inventory').innerHTML = '<p class="muted">Nothing in inventory yet. Scan a tag to assign the first unit.</p>';
     return;
   }
-  const head = d.locations.map(l => '<th>' + esc(short(l)) + '</th>').join('');
+  const gone = d.inactive || [];
+  const head = d.locations.map(l => '<th>' + esc(short(l)) + (gone.includes(l) ? '<br><small>removed</small>' : '') + '</th>').join('');
   const body = d.rows.map(r =>
     '<tr><td>' + esc(r.material) + '</td>' +
     d.locations.map(l => '<td class="' + (r.counts[l] ? '' : 'zero') + '">' + r.counts[l] + '</td>').join('') +
