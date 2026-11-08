@@ -265,7 +265,6 @@ function renderPanel() {
 }
 
 function renderAssign(panel, tag) {
-  const reused = tag.state === 'removed';
   const locs = current.locations.map(l =>
     '<button type="button" data-loc="' + esc(l) + '" aria-pressed="' + (pickedLocation === l) + '">' + esc(l) + '</button>'
   ).join('');
@@ -273,7 +272,7 @@ function renderAssign(panel, tag) {
   panel.innerHTML =
     '<div class="stack">' +
       '<div><span class="tagid">' + esc(tag.id) + '</span> ' +
-      (reused ? '<span class="badge off">Used · ' + esc(tag.status) + '</span>' : '<span class="badge new">Unassigned</span>') +
+      '<span class="badge new">Unassigned</span>' +
       '</div>' +
       '<div><label for="matInput">Material on this unit</label>' +
       '<div class="combo">' +
