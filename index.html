@@ -66,6 +66,7 @@
   .seg button.danger { border-color: var(--alert); color: var(--alert); }
   .seg button.danger:hover { background: var(--err-bg); }
   .seg button.danger[aria-pressed=true] { background: var(--alert); border-color: var(--alert); color: #fff; }
+  .preview { width: 100%; max-height: 320px; object-fit: contain; border-radius: 6px; border: 1px solid var(--line); background: #f4f5f2; }
   .confirmbox { padding: 12px 14px; border-radius: 6px; background: var(--ok-bg); border: 1px solid #a9d3bc; }
   .confirmbox.out { background: var(--err-bg); border-color: #e3b5a2; }
   label { font-weight: 600; display: block; margin-bottom: 6px; }
@@ -151,6 +152,8 @@ let scanner = null;
 let current = null;      // { tag, materials, locations, removed }
 let pickedLocation = '';
 let pickedTo = '';
+let pickedMaterial = '';
+let photoData = '';
 const OUT_OPTIONS = ['Open']; // choices that take a unit out of inventory
 let toastTimer;
 
@@ -247,6 +250,7 @@ async function lookup(raw) {
     if (d.error) throw new Error(d.error);
     current = d;
     pickedLocation = '';
+    pickedMaterial = '';
     renderPanel();
     $('panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) {
@@ -292,6 +296,7 @@ function renderAssign(panel, tag) {
     [...$('locSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b));
   });
   setupCombo(current.materials);
+  if (pickedMaterial) $('matInput').value = pickedMaterial;
   $('cancelBtn').onclick = closePanel;
   $('assignBtn').onclick = doAssign;
 }
@@ -386,20 +391,88 @@ function closePanel() {
 
 /* ---------- actions ---------- */
 
-async function doAssign() {
-  const material = $('matInput').value.trim();
-  if (!material) return toast('Choose a material', 'err');
+function doAssign() {
+  const typed = $('matInput').value.trim();
+  if (!typed) return toast('Choose a material', 'err');
+  const match = current.materials.find(m => m.toLowerCase() === typed.toLowerCase());
+  if (!match) return toast('"' + typed + '" is not on the Materials list. Pick one from the list.', 'err');
   if (!pickedLocation) return toast('Choose a location', 'err');
-  $('assignBtn').disabled = true;
+  pickedMaterial = match;
+  photoData = '';
+  renderPhotoStep();
+}
+
+function compressImage(file, maxEdge = 1600, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * scale);
+      c.height = Math.round(img.naturalHeight * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that photo. Try again.')); };
+    img.src = url;
+  });
+}
+
+function renderPhotoStep() {
+  const tag = current.tag;
+  $('panel').innerHTML =
+    '<div class="stack">' +
+      '<div><span class="tagid">' + esc(tag.id) + '</span>' +
+      '<dl class="facts"><dt>Material</dt><dd>' + esc(pickedMaterial) + '</dd><dt>Location</dt><dd>' + esc(pickedLocation) + '</dd></dl></div>' +
+      '<div><label>Photo of the sawmill tag</label>' +
+      '<p class="muted" style="margin:0">Take a clear photo of the sawmill tag on this unit. The tag is assigned when the photo saves.</p></div>' +
+      '<img id="photoPreview" class="preview" alt="Sawmill tag photo preview" hidden>' +
+      '<input type="file" id="photoInput" accept="image/*" capture="environment" hidden>' +
+      '<button type="button" id="takeBtn">Take photo</button>' +
+      '<button type="button" id="saveBtn" disabled>Save photo and assign</button>' +
+      '<button type="button" class="secondary" id="backBtn">Back</button>' +
+    '</div>';
+
+  $('takeBtn').onclick = () => $('photoInput').click();
+  $('photoInput').onchange = async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      const dataUrl = await compressImage(f);
+      photoData = dataUrl.split(',')[1];
+      $('photoPreview').src = dataUrl;
+      $('photoPreview').hidden = false;
+      $('takeBtn').textContent = 'Retake photo';
+      $('takeBtn').className = 'secondary';
+      $('saveBtn').disabled = false;
+    } catch (err) {
+      toast(err.message, 'err');
+    }
+    e.target.value = '';
+  };
+  $('saveBtn').onclick = doAssignWithPhoto;
+  $('backBtn').onclick = () => { photoData = ''; renderPanel(); };
+}
+
+async function doAssignWithPhoto() {
+  if (!photoData) return toast('Take a photo of the sawmill tag first', 'err');
+  const tag = current.tag;
+  const buttons = document.querySelectorAll('#panel button');
+  buttons.forEach(b => b.disabled = true);
+  $('saveBtn').textContent = 'Saving…';
   try {
-    const d = await post({ action: 'assign', id: current.tag.id, material, location: pickedLocation });
+    const d = await post({ action: 'assign', id: tag.id, material: pickedMaterial, location: pickedLocation, photo: photoData });
     if (d.error) throw new Error(d.error);
-    toast(current.tag.id + ' assigned: ' + d.tag.material + ' at ' + d.tag.location);
+    toast(tag.id + ' assigned: ' + d.tag.material + ' at ' + d.tag.location + ' (photo saved)');
+    photoData = '';
     closePanel();
     loadInventory();
   } catch (e) {
     toast(e.message, 'err');
-    const b = $('assignBtn'); if (b) b.disabled = false;
+    buttons.forEach(b => b.disabled = false);
+    $('saveBtn').textContent = 'Save photo and assign';
   }
 }
 
